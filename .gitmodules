@@ -1,0 +1,3 @@
+[submodule "bundles"]
+	path = bundles
+	url = https://andrey.pogoreltsev@stash.aggregion.com/scm/cla/azbuka-bundle-cpp.git
