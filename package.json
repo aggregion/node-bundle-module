@@ -1,0 +1,8 @@
+{
+  "name": "bundles-library",
+  "version": "0.0.1",
+  "main": "index.js",
+  "scripts": {
+    "install": "node-gyp configure && node-gyp build"
+  }
+}
