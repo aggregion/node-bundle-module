@@ -244,9 +244,9 @@ void Bundle::FileNames(const FunctionCallbackInfo<Value>& args) {
     idx = BundleFileName(obj->_bundle, idx, tmp, sizeof(tmp));
     files.push_back(string(tmp));
   }
-  auto result = v8::Array::New(isolate, files.size());
+  auto result = v8::Array::New(isolate, static_cast<int>(files.size()));
 
-  for (int i = 0, j = files.size(); i < j; i++) {
+  for (int i = 0, j = static_cast<int>(files.size()); i < j; i++) {
     result->Set(i, String::NewFromUtf8(isolate, files[i].c_str()));
   }
   args.GetReturnValue().Set(result);
@@ -297,9 +297,9 @@ void Bundle::FileSeek(const FunctionCallbackInfo<Value>& args) {
 
   int64_t newPos = BundleFileSeek(obj->_bundle,
                                   fileIdx,
-                                  offset,
+                                  static_cast<int64_t>(offset),
                                   static_cast<BundleFileOrigin>(origin));
-  args.GetReturnValue().Set(v8::Number::New(isolate, newPos));
+  args.GetReturnValue().Set(v8::Number::New(isolate, static_cast<double>(newPos)));
 }
 
 void Bundle::FileLength(const FunctionCallbackInfo<Value>& args) {
@@ -313,7 +313,7 @@ void Bundle::FileLength(const FunctionCallbackInfo<Value>& args) {
   int     fileIdx = args[0]->Int32Value();
 
   int64_t total = BundleFileLength(obj->_bundle, fileIdx);
-  args.GetReturnValue().Set(v8::Number::New(isolate, total));
+  args.GetReturnValue().Set(v8::Number::New(isolate, static_cast<double>(total)));
 }
 
 void Bundle::FileRead(const FunctionCallbackInfo<Value>& args) {
@@ -331,8 +331,8 @@ void Bundle::FileRead(const FunctionCallbackInfo<Value>& args) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Bad length")));
   }
 
-  void   *dst    = malloc(total);
-  int64_t dstLen = total;
+  void   *dst    = malloc(static_cast<size_t>(total));
+  int64_t dstLen = static_cast<int64_t>(total);
 
   if (dst == nullptr) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Out of memory")));
