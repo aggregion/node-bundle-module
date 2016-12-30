@@ -74,6 +74,6 @@ var bundleFiles = bundle.FileNames();
 console.log(bundleFiles);
 
 console.log(bundle.FileOpen("FileOne.dat", false));
-assert(bundle.FileOpen("FileOne.dat", false) == 0);
+assert(bundle.FileOpen("FileOne.dat", false) == -1);
 
 console.log("Done!");

@@ -13,7 +13,7 @@
                 "bundles/mbedtls-2.4.0/library/aes.c",
                 "bundles/mbedtls-2.4.0/library/padlock.c"
             ],
-            "cflags":         [ "-std=c++11"],
+            "cflags_cxx":     [ "-std=c++11"],
             "cflags!":        [ "-fno-exceptions" ],
             "cflags_cc!":     [ "-fno-exceptions" ],
         },
@@ -31,7 +31,7 @@
             "dependencies":   [
                 "BundlesLibrary"
             ],
-            "cflags":         [ "-std=c++11" ],
+            "cflags_cxx":     [ "-std=c++11" ],
             "cflags!":        [ "-fno-exceptions" ],
             "cflags_cc!":     [ "-fno-exceptions" ],
 
