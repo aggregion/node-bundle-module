@@ -19,7 +19,6 @@ private:
   virtual ~Bundle();
 
   static void New(const v8::FunctionCallbackInfo<v8::Value>& args);
-  static void Initialize(const FunctionCallbackInfo<Value>& args);
 
   /**
    * @param attr {"Private", "Public", "System"}

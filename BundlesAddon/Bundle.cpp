@@ -9,12 +9,60 @@ using namespace std;
 using namespace v8;
 using namespace node;
 
+/**
+ * @example
+ *   var bundle = new BundlesAddon.Bundle("/tmp/someBundle.dat", ["Read", "Write", "OpenAlways"]);
+ */
+void InitAll(Local<Object>exports) {
+  aggregion::Bundle::Init(exports);
+}
+
+NODE_MODULE(BundlesAddon, InitAll)
+
 namespace aggregion {
 Persistent<Function> Bundle::constructor;
 
+BundleAttribute fromParam(const string& param) {
+  int type = 0;
+
+  if (param.compare("Private") == 0) {
+    type = BUNDLE_EXTRA_PRIVATE;
+  } else if (param.compare("Public") == 0) {
+    type = BUNDLE_EXTRA_PUBLIC;
+  } else if (param.compare("System") == 0) {
+    type = BUNDLE_EXTRA_SYSTEM;
+  }
+  return static_cast<BundleAttribute>(type);
+}
+
+vector<char>dataFromArg(Local<Value>val) {
+  vector<char> ret;
+
+  if (node::Buffer::HasInstance(val)) {
+    Local<Object> buf = val->ToObject();
+    ret.resize(static_cast<size_t>(Buffer::Length(buf)));
+    memcpy(&ret[0], Buffer::Data(buf), ret.size());
+  } else if (!val->IsObject()) {
+    Local<String> strInput = val->ToString();
+    ret.resize(static_cast<size_t>(strInput->Utf8Length()));
+    memcpy(&ret[0], *String::Utf8Value(strInput), ret.size());
+  }
+  return ret;
+}
+
+void buffer_delete_callback(char *data, void *the_vector) {
+  delete reinterpret_cast<vector<char> *>(the_vector);
+}
+
 Bundle::Bundle(const std::string& fileName,
                BundleOpenMode     mode) {
+  unsigned char dirKey[] = { 0x5C, 0xE5, 0xA2, 0x83, 0x10, 0xDA, 0x4F, 0x8F,
+                             0x82, 0xAF, 0x61, 0xDD, 0x64, 0x74, 0x50, 0x85 };
+
   _bundle = BundleOpen(fileName.c_str(), mode);
+
+
+  BundleInitialize(_bundle, dirKey, sizeof(dirKey));
 }
 
 Bundle::~Bundle() {
@@ -33,18 +81,17 @@ void Bundle::Init(Local<Object>exports) {
   tpl->InstanceTemplate()->SetInternalFieldCount(1);
 
   // Prototype
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleInitialize",       Initialize);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleAttributeGet",     AttributeGet);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleAttributeSet",     AttributeSet);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleFileAttributeGet", FileAttributeGet);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleFileAttributeSet", FileAttributeSet);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleFileNames",        FileNames);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleFileOpen",         FileOpen);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleFileSeek",         FileSeek);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleFileLength",       FileLength);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleFileRead",         FileRead);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleFileWrite",        FileWrite);
-  NODE_SET_PROTOTYPE_METHOD(tpl, "bundleFileDelete",       FileDelete);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "AttributeGet",     AttributeGet);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "AttributeSet",     AttributeSet);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "FileAttributeGet", FileAttributeGet);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "FileAttributeSet", FileAttributeSet);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "FileNames",        FileNames);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "FileOpen",         FileOpen);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "FileSeek",         FileSeek);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "FileLength",       FileLength);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "FileRead",         FileRead);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "FileWrite",        FileWrite);
+  NODE_SET_PROTOTYPE_METHOD(tpl, "FileDelete",       FileDelete);
 
   constructor.Reset(isolate, tpl->GetFunction());
   exports->Set(String::NewFromUtf8(isolate, "Bundle"), tpl->GetFunction());
@@ -109,28 +156,6 @@ void Bundle::New(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
-void Bundle::Initialize(const FunctionCallbackInfo<Value>& args) {
-  unsigned char dirKey[] = { 0x5C, 0xE5, 0xA2, 0x83, 0x10, 0xDA, 0x4F, 0x8F,
-                             0x82, 0xAF, 0x61, 0xDD, 0x64, 0x74, 0x50, 0x85 };
-
-  Bundle *obj = ObjectWrap::Unwrap<Bundle>(args.Holder());
-
-  BundleInitialize(obj->_bundle, dirKey, sizeof(dirKey));
-}
-
-BundleAttribute fromParam(const string& param) {
-  int type = 0;
-
-  if (param.compare("Private") == 0) {
-    type = BUNDLE_EXTRA_PRIVATE;
-  } else if (param.compare("Public") == 0) {
-    type = BUNDLE_EXTRA_PUBLIC;
-  } else if (param.compare("System") == 0) {
-    type = BUNDLE_EXTRA_SYSTEM;
-  }
-  return static_cast<BundleAttribute>(type);
-}
-
 void Bundle::AttributeGet(const FunctionCallbackInfo<Value>& args) {
   Isolate *isolate = args.GetIsolate();
 
@@ -143,41 +168,39 @@ void Bundle::AttributeGet(const FunctionCallbackInfo<Value>& args) {
 
   BundleAttribute type = fromParam(*String::Utf8Value(args[0]->ToString()));
 
-  vector<char> dst;
+  auto dst       = new vector<char>();
   int64_t dstLen = 0;
 
   // calculate size
   BundleAttributeGet(obj->_bundle, type, nullptr, 0, &dstLen);
 
   if (dstLen > 0) {
-    dst.resize(static_cast<int>(dstLen));
-    BundleAttributeGet(obj->_bundle, type, dst.data(), 0, &dstLen);
+    dst->resize(static_cast<int>(dstLen));
+    BundleAttributeGet(obj->_bundle, type, dst->data(), 0, &dstLen);
   }
 
-  auto result = node::Buffer::New(isolate, dst.data(), dst.size());
+  auto result = Nan::NewBuffer(dst->data(), dst->size(), buffer_delete_callback, dst);
   args.GetReturnValue().Set(result.ToLocalChecked());
 }
 
 void Bundle::AttributeSet(const FunctionCallbackInfo<Value>& args) {
   Isolate *isolate = args.GetIsolate();
 
-  if ((args.Length() != 2) || !args[0]->IsString() || !node::Buffer::HasInstance(args[1])) {
+  if ((args.Length() != 2) || !args[0]->IsString()) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
     return;
   }
+
   Bundle *obj = ObjectWrap::Unwrap<Bundle>(args.Holder());
 
   BundleAttribute type = fromParam(*String::Utf8Value(args[0]->ToString()));
-  Local<Object>   buf  = args[1]->ToObject();
+  auto buf             = dataFromArg(args[1]);
 
   // set
-  int64_t total = BundleAttributeSet(obj->_bundle,
-                                     type,
-                                     node::Buffer::Data(buf),
-                                     0,
-                                     (int64_t)node::Buffer::Length(buf));
+  int64_t total =
+    BundleAttributeSet(obj->_bundle, type, buf.data(), 0, static_cast<int64_t>(buf.size()));
 
-  if (total != node::Buffer::Length(buf)) {
+  if (total != static_cast<int64_t>(buf.size())) {
     isolate->ThrowException(Exception::TypeError(
                               String::NewFromUtf8(isolate, "Failed to write attribute")));
   }
@@ -193,41 +216,40 @@ void Bundle::FileAttributeGet(const FunctionCallbackInfo<Value>& args)     {
   }
   Bundle *obj     = ObjectWrap::Unwrap<Bundle>(args.Holder());
   int     fileIdx = args[0]->Int32Value();
-  vector<char> dst;
-  int64_t dstLen = 0;
+  auto    dst     = new vector<char>();
+  int64_t dstLen  = 0;
 
   // calculate size
   BundleFileAttributeGet(obj->_bundle, fileIdx, nullptr, 0, &dstLen, nullptr);
 
   if (dstLen > 0) {
-    dst.resize(static_cast<int>(dstLen));
-    BundleFileAttributeGet(obj->_bundle, fileIdx, dst.data(), 0, &dstLen, nullptr);
+    dst->resize(static_cast<int>(dstLen));
+    BundleFileAttributeGet(obj->_bundle, fileIdx, dst->data(), 0, &dstLen, nullptr);
   }
 
-  auto result = node::Buffer::New(isolate, dst.data(), dst.size());
+  auto result = Nan::NewBuffer(dst->data(), dst->size(), buffer_delete_callback, dst);
   args.GetReturnValue().Set(result.ToLocalChecked());
 }
 
 void Bundle::FileAttributeSet(const FunctionCallbackInfo<Value>& args) {
   Isolate *isolate = args.GetIsolate();
 
-  if ((args.Length() != 2) || !args[0]->IsInt32() || !node::Buffer::HasInstance(args[1])) {
+  if ((args.Length() != 2) || !args[0]->IsInt32()) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
     return;
   }
-  Bundle *obj       = ObjectWrap::Unwrap<Bundle>(args.Holder());
-  int     fileIdx   = args[0]->Int32Value();
-  Local<Object> buf = args[1]->ToObject();
+  Bundle *obj     = ObjectWrap::Unwrap<Bundle>(args.Holder());
+  int     fileIdx = args[0]->Int32Value();
+
+
+  auto buf = dataFromArg(args[1]);
 
   // set
-  int64_t total = BundleFileAttributeSet(obj->_bundle,
-                                         fileIdx,
-                                         node::Buffer::Data(buf),
-                                         0,
-                                         (int64_t)node::Buffer::Length(buf),
-                                         nullptr);
+  int64_t total =
+    BundleFileAttributeSet(obj->_bundle, fileIdx, buf.data(), 0,
+                           static_cast<int64_t>(buf.size()), nullptr);
 
-  if (total != node::Buffer::Length(buf)) {
+  if (total != static_cast<int64_t>(buf.size())) {
     isolate->ThrowException(Exception::TypeError(
                               String::NewFromUtf8(isolate, "Failed to write attribute")));
   }
@@ -238,12 +260,16 @@ void Bundle::FileNames(const FunctionCallbackInfo<Value>& args) {
   Bundle  *obj     = ObjectWrap::Unwrap<Bundle>(args.Holder());
 
   vector<string> files;
+  int idx = 0;
 
-  for (int idx = 0; idx != -1;) {
-    char tmp[255];
+  do {
+    char tmp[255] = { 0 };
     idx = BundleFileName(obj->_bundle, idx, tmp, sizeof(tmp));
-    files.push_back(string(tmp));
-  }
+
+    if ((idx != -1) && (tmp[0] != '\0')) {
+      files.push_back(string(tmp));
+    }
+  } while (idx != -1);
   auto result = v8::Array::New(isolate, static_cast<int>(files.size()));
 
   for (int i = 0, j = static_cast<int>(files.size()); i < j; i++) {
@@ -331,45 +357,41 @@ void Bundle::FileRead(const FunctionCallbackInfo<Value>& args) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Bad length")));
   }
 
-  void   *dst    = malloc(static_cast<size_t>(total));
+  auto dst       = new vector<char>(static_cast<size_t>(total));
   int64_t dstLen = static_cast<int64_t>(total);
 
-  if (dst == nullptr) {
-    isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Out of memory")));
-  }
-
   // calculate size
-  dstLen = BundleFileRead(obj->_bundle, fileIdx, dst, 0, &dstLen, nullptr);
+  dstLen = BundleFileRead(obj->_bundle, fileIdx, dst->data(), 0, &dstLen, nullptr);
 
-  auto result = node::Buffer::New(isolate, reinterpret_cast<char *>(dst), dstLen);
+  auto result = Nan::NewBuffer(dst->data(), dst->size(), buffer_delete_callback, dst);
   args.GetReturnValue().Set(result.ToLocalChecked());
-
-  free(dst);
 }
 
 void Bundle::FileWrite(const FunctionCallbackInfo<Value>& args) {
   Isolate *isolate = args.GetIsolate();
 
-  if ((args.Length() != 2) || !args[0]->IsInt32() || !node::Buffer::HasInstance(args[1])) {
+  if ((args.Length() != 2) || !args[0]->IsInt32()) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
     return;
   }
-  Bundle *obj       = ObjectWrap::Unwrap<Bundle>(args.Holder());
-  int     fileIdx   = args[0]->Int32Value();
-  Local<Object> buf = args[1]->ToObject();
+  Bundle *obj     = ObjectWrap::Unwrap<Bundle>(args.Holder());
+  int     fileIdx = args[0]->Int32Value();
+  auto    buf     = dataFromArg(args[1]);
 
   // set
   int64_t total = BundleFileWrite(obj->_bundle,
                                   fileIdx,
-                                  node::Buffer::Data(buf),
+                                  buf.data(),
                                   0,
-                                  (int64_t)node::Buffer::Length(buf),
+                                  static_cast<int64_t>(buf.size()),
                                   nullptr);
 
-  if (total != node::Buffer::Length(buf)) {
+  if (total != static_cast<int64_t>(buf.size())) {
     isolate->ThrowException(Exception::TypeError(
                               String::NewFromUtf8(isolate, "Failed to write data")));
   }
+
+  args.GetReturnValue().Set(v8::Number::New(isolate, static_cast<double>(total)));
 }
 
 void Bundle::FileDelete(const FunctionCallbackInfo<Value>& args) {

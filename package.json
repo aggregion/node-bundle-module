@@ -3,6 +3,13 @@
   "version": "0.0.1",
   "main": "index.js",
   "scripts": {
-    "install": "node-gyp configure && node-gyp build"
+    "install": "node-gyp configure && node-gyp build",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "nan": "^2.5.0",
+    "node-gyp": "^3.4.0",
+    "uv": "0.0.0",
+    "v8": "^0.1.0"
   }
 }

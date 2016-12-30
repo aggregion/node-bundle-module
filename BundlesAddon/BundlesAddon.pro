@@ -40,7 +40,6 @@ SOURCES += \
     Bundle.cpp
 
 HEADERS +=\
-    BundlesLibNodeJS.h \
     exports.h \
     Bundle.h
 

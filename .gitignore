@@ -55,3 +55,4 @@ dist
 *.suo
 *.log
 *.opendb
+node_modules
