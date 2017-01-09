@@ -283,13 +283,12 @@ void Bundle::FileOpen(const FunctionCallbackInfo<Value>& args) {
   bool     openAlways = false;
 
   if ((args.Length() < 1) || !args[0]->IsString()) {
-    isolate->ThrowException(
-      Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
+    isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
     return;
   }
 
   if ((args.Length() > 1) && args[1]->IsBoolean()) {
-    openAlways = args[0]->BooleanValue();
+    openAlways = args[1]->BooleanValue();
   }
   Bundle *obj      = ObjectWrap::Unwrap<Bundle>(args.Holder());
   string  fileName = *String::Utf8Value(args[0]->ToString());

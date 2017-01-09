@@ -71,9 +71,8 @@ assert(bundle.FileOpen("FileOne.dat", false) == fileOne);
 bundle.FileDelete(fileOne);
 
 var bundleFiles = bundle.FileNames();
-console.log(bundleFiles);
+assert(bundleFiles.length == 2);
 
-console.log(bundle.FileOpen("FileOne.dat", false));
 assert(bundle.FileOpen("FileOne.dat", false) == -1);
 
 console.log("Done!");
