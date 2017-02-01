@@ -2,11 +2,34 @@
 #include <string>
 #include <node.h>
 #include <node_object_wrap.h>
+#include <uv.h>
 #include "BundlesLibrary.h"
 
 using v8::FunctionCallbackInfo;
 using v8::Value;
 namespace aggregion {
+struct Work {
+  // required
+  uv_work_t                   request;  // libuv
+  v8::Persistent<v8::Function>callback; // javascript callback
+
+  // optional : data goes here.
+  // data that doesn't go back to javascript can be any typedef
+  // data that goes back to javascript needs to be a supported type
+  enum class Operation {
+    OpAttributeGet, OpAttributeSet, OpFileAttributeGet, OpFileAttributeSet, OpFileRead, OpFileWrite
+  };
+
+  Operation          operation;
+  class Bundle      *bundle;
+  int                fileIdx;
+  std::vector<char> *buffer;
+  std::string        param;
+
+  // operation error
+  std::string error;
+};
+
 class Bundle : public node::ObjectWrap {
 public:
 
@@ -23,7 +46,7 @@ private:
   /**
    * @param attr {"Private", "Public", "System"}
    * @example
-   *   var attrBuf = bundle.AttributeGet("Private");
+   *   bundle.AttributeGet("Private", callback);
    */
   static void AttributeGet(const FunctionCallbackInfo<Value>& args);
 
@@ -31,14 +54,14 @@ private:
    * @param attr {"Private", "Public", "System"}
    * @param value Buffer
    * @example
-   *   bundle.AttributeSet("Private", "SomeData");
+   *   bundle.AttributeSet("Private", "SomeData", callback);
    */
   static void AttributeSet(const FunctionCallbackInfo<Value>& args);
 
   /**
    * @param fileIndex
    * @example
-   *   var attrBuf = bundle.FileAttributeGet(100);
+   *   bundle.FileAttributeGet(100, callback);
    */
   static void FileAttributeGet(const FunctionCallbackInfo<Value>& args);
 
@@ -46,7 +69,7 @@ private:
    * @param fileIndex
    * @param value Buffer
    * @example
-   *   bundle.FileAttributeSet(100, "SomeData");
+   *   bundle.FileAttributeSet(100, "SomeData", callback);
    */
   static void FileAttributeSet(const FunctionCallbackInfo<Value>& args);
 
@@ -84,7 +107,7 @@ private:
    * @param fileIndex
    * @param length
    * @example
-   *   var buf = bundle.FileRead(100, 65535);
+   *   bundle.FileRead(100, 65535, callback);
    */
   static void FileRead(const FunctionCallbackInfo<Value>& args);
 
@@ -92,7 +115,7 @@ private:
    * @param fileIndex
    * @param buffer
    * @example
-   *   var total = bundle.FileWrite(100, someBuf);
+   *   bundle.FileWrite(100, someBuf, callback);
    */
   static void FileWrite(const FunctionCallbackInfo<Value>& args);
 
@@ -103,9 +126,21 @@ private:
    */
   static void FileDelete(const FunctionCallbackInfo<Value>& args);
 
+  static void StartWorkAsync(const FunctionCallbackInfo<Value>& args,
+                             Work::Operation                    operation,
+                             Bundle                            *bundle,
+                             int                                fileIdx,
+                             std::vector<char>                 *buffer,
+                             std::string                        param,
+                             v8::Local<v8::Function>            callback);
+
+  static void WorkAsync(uv_work_t *req);
+  static void WorkAsyncComplete(uv_work_t *req,
+                                int        status);
+
 private:
 
   BundlePtr _bundle;
-  static v8::Persistent<v8::Function> constructor;
+  static v8::Persistent<v8::Function>constructor;
 };
 } // aggregion

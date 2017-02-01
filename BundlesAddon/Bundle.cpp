@@ -35,17 +35,17 @@ BundleAttribute fromParam(const string& param) {
   return static_cast<BundleAttribute>(type);
 }
 
-vector<char>dataFromArg(Local<Value>val) {
-  vector<char> ret;
+vector<char>* dataFromArg(Local<Value>val) {
+  auto ret = new vector<char>();
 
   if (node::Buffer::HasInstance(val)) {
     Local<Object> buf = val->ToObject();
-    ret.resize(static_cast<size_t>(Buffer::Length(buf)));
-    memcpy(&ret[0], Buffer::Data(buf), ret.size());
+    ret->resize(static_cast<size_t>(Buffer::Length(buf)));
+    memcpy(ret->data(), Buffer::Data(buf), ret->size());
   } else if (!val->IsObject()) {
     Local<String> strInput = val->ToString();
-    ret.resize(static_cast<size_t>(strInput->Utf8Length()));
-    memcpy(&ret[0], *String::Utf8Value(strInput), ret.size());
+    ret->resize(static_cast<size_t>(strInput->Utf8Length()));
+    memcpy(ret->data(), *String::Utf8Value(strInput), ret->size());
   }
   return ret;
 }
@@ -156,10 +156,130 @@ void Bundle::New(const FunctionCallbackInfo<Value>& args) {
   }
 }
 
+void Bundle::StartWorkAsync(const FunctionCallbackInfo<Value>& args,
+                            Work::Operation                    operation,
+                            Bundle                            *bundle,
+                            int                                fileIdx,
+                            std::vector<char>                 *buffer,
+                            string                             param,
+                            Local<Function>                    callback) {
+  Isolate *isolate = Isolate::GetCurrent();
+
+  isolate->ThrowException(
+    Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
+
+  return;
+
+  Work *work = new Work();
+  work->request.data = work;
+  work->operation    = operation;
+  work->bundle       = bundle;
+  work->fileIdx      = fileIdx;
+  work->buffer       = buffer;
+  work->param        = param;
+  work->callback.Reset(isolate, callback);
+
+  uv_queue_work(uv_default_loop(), &work->request, &Bundle::WorkAsync, &Bundle::WorkAsyncComplete);
+  args.GetReturnValue().Set(Undefined(isolate));
+}
+
+void Bundle::WorkAsync(uv_work_t *req)
+{
+  Work   *work  = static_cast<Work *>(req->data);
+  int64_t total = 0;
+  bool    write = true;
+
+  switch (work->operation) {
+  case Work::Operation::OpAttributeGet:
+    BundleAttributeGet(work->bundle, fromParam(work->param), work->buffer->data(), 0, &total);
+    write = false;
+    break;
+
+  case Work::Operation::OpAttributeSet:
+    total = BundleAttributeSet(work->bundle, fromParam(work->param), work->buffer->data(), 0,
+                               static_cast<int64_t>(work->buffer->size()));
+    break;
+
+  case Work::Operation::OpFileAttributeGet:
+    BundleFileAttributeGet(work->bundle, work->fileIdx, work->buffer->data(), 0, &total, nullptr);
+    write = false;
+    break;
+
+  case Work::Operation::OpFileAttributeSet:
+    total = BundleFileAttributeSet(work->bundle, work->fileIdx, work->buffer->data(), 0,
+                                   static_cast<int64_t>(work->buffer->size()), nullptr);
+    break;
+
+  case Work::Operation::OpFileRead:
+    BundleFileRead(work->bundle, work->fileIdx, work->buffer->data(), 0, &total, nullptr);
+    write = false;
+    break;
+
+  case Work::Operation::OpFileWrite:
+    total = BundleFileWrite(work->bundle, work->fileIdx,
+                            work->buffer->data(), 0,
+                            static_cast<int64_t>(work->buffer->size()), nullptr);
+    break;
+  }
+
+  if (!write) {
+    if ((total > 0) && (static_cast<size_t>(total) < work->buffer->size())) {
+      work->buffer->resize(static_cast<size_t>(total));
+    }
+  } else {
+    if (total != static_cast<int64_t>(work->buffer->size())) {
+      work->error = "Failed to write content";
+    }
+  }
+}
+
+void Bundle::WorkAsyncComplete(uv_work_t *req, int status)
+{
+  Isolate *isolate = Isolate::GetCurrent();
+
+  v8::HandleScope handleScope(isolate); // Required for Node 4.x
+
+  Work *work = static_cast<Work *>(req->data);
+
+  MaybeLocal<String> error = String::NewFromUtf8(isolate,
+                                                 work->error.c_str(),
+                                                 v8::NewStringType::kNormal);
+  Handle<Value> errorLocal = Null(isolate);
+
+  if (!work->error.empty()) {
+    errorLocal = error.ToLocalChecked();
+  }
+
+  // set up return arguments
+  Handle<Value> argv[2] = { errorLocal };
+  bool write            = true;
+  auto result           = Nan::NewBuffer(work->buffer->data(),
+                                         work->buffer->size(),
+                                         buffer_delete_callback,
+                                         work->buffer);
+
+
+  if ((work->operation == Work::Operation::OpAttributeGet) ||
+      (work->operation == Work::Operation::OpFileAttributeGet) ||
+      (work->operation == Work::Operation::OpFileRead)) {
+    argv[1] = result.ToLocalChecked();
+    write   = false;
+  }
+
+  // execute the callback
+  Local<Function>::New(isolate, work->callback)->Call(
+    isolate->GetCurrentContext()->Global(), write ? 1 : 2, argv);
+
+  // Free up the persistent function callback
+  work->callback.Reset();
+
+  delete work;
+}
+
 void Bundle::AttributeGet(const FunctionCallbackInfo<Value>& args) {
   Isolate *isolate = args.GetIsolate();
 
-  if ((args.Length() != 1) || !args[0]->IsString()) {
+  if ((args.Length() != 2) || !args[0]->IsString() || !args[1]->IsFunction()) {
     isolate->ThrowException(
       Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
     return;
@@ -173,43 +293,42 @@ void Bundle::AttributeGet(const FunctionCallbackInfo<Value>& args) {
 
   // calculate size
   BundleAttributeGet(obj->_bundle, type, nullptr, 0, &dstLen);
+  dst->resize(static_cast<int>(dstLen));
 
-  if (dstLen > 0) {
-    dst->resize(static_cast<int>(dstLen));
-    BundleAttributeGet(obj->_bundle, type, dst->data(), 0, &dstLen);
-  }
-
-  auto result = Nan::NewBuffer(dst->data(), dst->size(), buffer_delete_callback, dst);
-  args.GetReturnValue().Set(result.ToLocalChecked());
+  StartWorkAsync(args,
+                 Work::Operation::OpAttributeGet,
+                 obj,
+                 -1,
+                 dst,
+                 *String::Utf8Value(args[0]->ToString()),
+                 Local<Function>::Cast(args[1]));
 }
 
 void Bundle::AttributeSet(const FunctionCallbackInfo<Value>& args) {
   Isolate *isolate = args.GetIsolate();
 
-  if ((args.Length() != 2) || !args[0]->IsString()) {
+  if ((args.Length() !=  4) || !args[0]->IsString() || !args[2]->IsFunction()) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
     return;
   }
 
   Bundle *obj = ObjectWrap::Unwrap<Bundle>(args.Holder());
 
-  BundleAttribute type = fromParam(*String::Utf8Value(args[0]->ToString()));
-  auto buf             = dataFromArg(args[1]);
+  auto src = dataFromArg(args[1]);
 
-  // set
-  int64_t total =
-    BundleAttributeSet(obj->_bundle, type, buf.data(), 0, static_cast<int64_t>(buf.size()));
-
-  if (total != static_cast<int64_t>(buf.size())) {
-    isolate->ThrowException(Exception::TypeError(
-                              String::NewFromUtf8(isolate, "Failed to write attribute")));
-  }
+  StartWorkAsync(args,
+                 Work::Operation::OpAttributeSet,
+                 obj,
+                 -1,
+                 src,
+                 *String::Utf8Value(args[0]->ToString()),
+                 Local<Function>::Cast(args[2]));
 }
 
 void Bundle::FileAttributeGet(const FunctionCallbackInfo<Value>& args)     {
   Isolate *isolate = args.GetIsolate();
 
-  if ((args.Length() != 1) || !args[0]->IsNumber()) {
+  if ((args.Length() != 2) || !args[0]->IsNumber() || !args[1]->IsFunction()) {
     isolate->ThrowException(
       Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
     return;
@@ -222,19 +341,20 @@ void Bundle::FileAttributeGet(const FunctionCallbackInfo<Value>& args)     {
   // calculate size
   BundleFileAttributeGet(obj->_bundle, fileIdx, nullptr, 0, &dstLen, nullptr);
 
-  if (dstLen > 0) {
-    dst->resize(static_cast<int>(dstLen));
-    BundleFileAttributeGet(obj->_bundle, fileIdx, dst->data(), 0, &dstLen, nullptr);
-  }
-
-  auto result = Nan::NewBuffer(dst->data(), dst->size(), buffer_delete_callback, dst);
-  args.GetReturnValue().Set(result.ToLocalChecked());
+  dst->resize(static_cast<int>(dstLen));
+  StartWorkAsync(args,
+                 Work::Operation::OpFileAttributeGet,
+                 obj,
+                 fileIdx,
+                 dst,
+                 "",
+                 Local<Function>::Cast(args[1]));
 }
 
 void Bundle::FileAttributeSet(const FunctionCallbackInfo<Value>& args) {
   Isolate *isolate = args.GetIsolate();
 
-  if ((args.Length() != 2) || !args[0]->IsInt32()) {
+  if ((args.Length() != 3) || !args[0]->IsInt32() || !args[2]->IsFunction()) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
     return;
   }
@@ -242,17 +362,15 @@ void Bundle::FileAttributeSet(const FunctionCallbackInfo<Value>& args) {
   int     fileIdx = args[0]->Int32Value();
 
 
-  auto buf = dataFromArg(args[1]);
+  auto src = dataFromArg(args[1]);
 
-  // set
-  int64_t total =
-    BundleFileAttributeSet(obj->_bundle, fileIdx, buf.data(), 0,
-                           static_cast<int64_t>(buf.size()), nullptr);
-
-  if (total != static_cast<int64_t>(buf.size())) {
-    isolate->ThrowException(Exception::TypeError(
-                              String::NewFromUtf8(isolate, "Failed to write attribute")));
-  }
+  StartWorkAsync(args,
+                 Work::Operation::OpFileAttributeSet,
+                 obj,
+                 fileIdx,
+                 src,
+                 "",
+                 Local<Function>::Cast(args[2]));
 }
 
 void Bundle::FileNames(const FunctionCallbackInfo<Value>& args) {
@@ -344,7 +462,7 @@ void Bundle::FileLength(const FunctionCallbackInfo<Value>& args) {
 void Bundle::FileRead(const FunctionCallbackInfo<Value>& args) {
   Isolate *isolate = args.GetIsolate();
 
-  if ((args.Length() != 2) || !args[0]->IsInt32() || !args[1]->IsNumber()) {
+  if ((args.Length() != 3) || !args[0]->IsInt32() || !args[1]->IsNumber() || !args[2]->IsFunction()) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
     return;
   }
@@ -356,41 +474,35 @@ void Bundle::FileRead(const FunctionCallbackInfo<Value>& args) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Bad length")));
   }
 
-  auto dst       = new vector<char>(static_cast<size_t>(total));
-  int64_t dstLen = static_cast<int64_t>(total);
+  auto dst = new vector<char>(static_cast<size_t>(total));
 
-  // calculate size
-  dstLen = BundleFileRead(obj->_bundle, fileIdx, dst->data(), 0, &dstLen, nullptr);
-
-  auto result = Nan::NewBuffer(dst->data(), dst->size(), buffer_delete_callback, dst);
-  args.GetReturnValue().Set(result.ToLocalChecked());
+  StartWorkAsync(args,
+                 Work::Operation::OpFileRead,
+                 obj,
+                 fileIdx,
+                 dst,
+                 "",
+                 Local<Function>::Cast(args[2]));
 }
 
 void Bundle::FileWrite(const FunctionCallbackInfo<Value>& args) {
   Isolate *isolate = args.GetIsolate();
 
-  if ((args.Length() != 2) || !args[0]->IsInt32()) {
+  if ((args.Length() != 3) || !args[0]->IsInt32() || !args[2]->IsFunction()) {
     isolate->ThrowException(Exception::TypeError(String::NewFromUtf8(isolate, "Wrong arguments")));
     return;
   }
   Bundle *obj     = ObjectWrap::Unwrap<Bundle>(args.Holder());
   int     fileIdx = args[0]->Int32Value();
-  auto    buf     = dataFromArg(args[1]);
+  auto    src     = dataFromArg(args[1]);
 
-  // set
-  int64_t total = BundleFileWrite(obj->_bundle,
-                                  fileIdx,
-                                  buf.data(),
-                                  0,
-                                  static_cast<int64_t>(buf.size()),
-                                  nullptr);
-
-  if (total != static_cast<int64_t>(buf.size())) {
-    isolate->ThrowException(Exception::TypeError(
-                              String::NewFromUtf8(isolate, "Failed to write data")));
-  }
-
-  args.GetReturnValue().Set(v8::Number::New(isolate, static_cast<double>(total)));
+  StartWorkAsync(args,
+                 Work::Operation::OpAttributeSet,
+                 obj,
+                 fileIdx,
+                 src,
+                 "",
+                 Local<Function>::Cast(args[2]));
 }
 
 void Bundle::FileDelete(const FunctionCallbackInfo<Value>& args) {
