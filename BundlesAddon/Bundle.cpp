@@ -143,7 +143,7 @@ void BundleWorker::Execute()
   try {
     switch (_operation) {
     case OpAttributeGet:
-      BundleAttributeGet(_bundle, fromParam(_param), _buffer->data(), 0, &total);
+	  total = BundleAttributeGet(_bundle, fromParam(_param), _buffer->data(), 0, &total);
       write = false;
       break;
 
@@ -154,7 +154,7 @@ void BundleWorker::Execute()
       break;
 
     case OpFileAttributeGet:
-      BundleFileAttributeGet(_bundle, _fileIdx, _buffer->data(), 0, &total, nullptr);
+	  total = BundleFileAttributeGet(_bundle, _fileIdx, _buffer->data(), 0, &total, nullptr);
       write = false;
       break;
 
@@ -164,7 +164,7 @@ void BundleWorker::Execute()
       break;
 
     case OpFileRead:
-      BundleFileRead(_bundle, _fileIdx, _buffer->data(), 0, &total, nullptr);
+	  total = BundleFileRead(_bundle, _fileIdx, _buffer->data(), 0, &total, nullptr);
       write = false;
       break;
 
