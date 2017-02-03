@@ -11,11 +11,19 @@
                 "bundles/lib/BundlesLibrary.cpp",
                 "bundles/lib/streams/BinaryFile.cpp",
                 "bundles/mbedtls-2.4.0/library/aes.c",
+                "bundles/mbedtls-2.4.0/library/aesni.c",
                 "bundles/mbedtls-2.4.0/library/padlock.c"
             ],
             "cflags_cxx":     [ "-std=c++11"],
             "cflags!":        [ "-fno-exceptions" ],
             "cflags_cc!":     [ "-fno-exceptions" ],
+            'conditions': [
+                ['OS=="mac"', {
+                  'xcode_settings': {
+                    'GCC_ENABLE_CPP_EXCEPTIONS': 'YES'
+                  }
+                }]
+            ]
         },
         {
             "target_name":    "BundlesAddon",
@@ -34,7 +42,13 @@
             "cflags_cxx":     [ "-std=c++11" ],
             "cflags!":        [ "-fno-exceptions" ],
             "cflags_cc!":     [ "-fno-exceptions" ],
-
+            'conditions': [
+                ['OS=="mac"', {
+                  'xcode_settings': {
+                    'GCC_ENABLE_CPP_EXCEPTIONS': 'YES'
+                  }
+                }]
+            ]
         }
     ]
 }
