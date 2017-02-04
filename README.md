@@ -2,11 +2,17 @@
 
 ## Installation
 
-`npm install git+ssh://git@stash.aggregion.com:7999/bck/node-bundle-module.git --save`
+```sh
+npm install git+ssh://git@stash.aggregion.com:7999/bck/node-bundle-module.git --save
+```
 
 ## Usage
 
 ```javascript
+const AggregionBundle = require('agg-bundle');
+
+// Create an instance
+
 let bundle = new AggregionBundle({path: '/path/to/bundle'});
 
 // Get list of files
