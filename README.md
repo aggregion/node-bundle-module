@@ -1,4 +1,4 @@
-# Module for working with Aggregion Binary bundles
+# Node.js module for reading and creating Aggregion binary bundles
 
 ## Installation
 

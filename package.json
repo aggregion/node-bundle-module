@@ -1,6 +1,7 @@
 {
   "name": "agg-bundle",
-  "version": "1.0.0",
+  "description": "Node.js module for reading and creating Aggregion binary bundles",
+  "version": "1.0.1",
   "main": "index.js",
   "scripts": {
     "test": "./node_modules/mocha/bin/mocha ./*.spec.js"
