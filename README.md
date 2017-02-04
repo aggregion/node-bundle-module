@@ -132,6 +132,8 @@ bundle.deleteFile('path/to/existing/file.dat');
 
 ```
 
-## Test
+## Run tests
 
-`npm test`
+```sh
+npm test
+```
