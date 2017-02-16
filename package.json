@@ -4,7 +4,7 @@
   "version": "1.0.3",
   "main": "index.js",
   "bin": {
-    "readbundle": "./bin/readbundle.js"
+    "readbundle": "./utils/readbundle.js"
   },
   "scripts": {
     "test": "./node_modules/mocha/bin/mocha ./*.spec.js"
