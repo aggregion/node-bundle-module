@@ -138,6 +138,12 @@ private:
    */
   static NAN_METHOD(FileDelete);
 
+  /**
+   * @example
+   *   bundle.Close();
+   */
+  static NAN_METHOD(Close);
+
 private:
 
   BundlePtr _bundle = nullptr;

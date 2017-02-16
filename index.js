@@ -13,19 +13,22 @@ const BundleAttributeType = {
     PRIVATE: 'Private'
 };
 
-class AggregionBundle  {
+class AggregionBundle {
 
     /**
      * Constructs a new instance
      * @param {object} options
      * @param {string} options.path Path to file
+     * @param {boolean} [options.readonly] Open for read-only
      */
     constructor(options) {
         check.assert.assigned(options, '"options" is required argument');
         check.assert.assigned(options.path, '"options.path" is required argument');
         check.assert.nonEmptyString(options.path, '"options.path" should be non-empty string');
+        this._closed = false;
         let {path} = options;
-        this._bundle = new Addon.Bundle(path, ['Read', 'Write', 'OpenAlways']);
+        let mode = options.readonly ? ['Read'] : ['Read', 'Write', 'OpenAlways'];
+        this._bundle = new Addon.Bundle(path, mode);
     }
 
     /**
@@ -33,6 +36,7 @@ class AggregionBundle  {
      * @return {Promise.<string[]>}
      */
     getFiles() {
+        this._checkNotClosed();
         let {_bundle: bundle} = this;
         return Promise.resolve(bundle.FileNames());
     }
@@ -42,6 +46,7 @@ class AggregionBundle  {
      * @return {Promise.<Buffer>}
      */
     getBundleInfoData() {
+        this._checkNotClosed();
         return this._readBundleAttribute(BundleAttributeType.PUBLIC);
     }
 
@@ -51,6 +56,7 @@ class AggregionBundle  {
      * @return {Promise}
      */
     setBundleInfoData(data) {
+        this._checkNotClosed();
         check.assert.assigned(data, '"data" is required argument');
         return this._writeBundleAttribute(BundleAttributeType.PUBLIC, data);
     }
@@ -60,6 +66,7 @@ class AggregionBundle  {
      * @return {Promise.<Buffer>}
      */
     getBundlePropertiesData() {
+        this._checkNotClosed();
         return this._readBundleAttribute(BundleAttributeType.PRIVATE);
     }
 
@@ -69,6 +76,7 @@ class AggregionBundle  {
      * @return {Promise}
      */
     setBundlePropertiesData(data) {
+        this._checkNotClosed();
         check.assert.assigned(data, '"data" is required argument');
         return this._writeBundleAttribute(BundleAttributeType.PRIVATE, data);
     }
@@ -80,6 +88,7 @@ class AggregionBundle  {
      * @return {Promise.<number>} File descriptor
      */
     createFile(path) {
+        this._checkNotClosed();
         check.assert.assigned(path, '"path" is required argument');
         check.assert.nonEmptyString(path, '"path" should be non-empty string');
         return Promise.resolve(this._openFile(path, true));
@@ -91,6 +100,7 @@ class AggregionBundle  {
      * @return {number} File descriptor
      */
     openFile(path) {
+        this._checkNotClosed();
         check.assert.assigned(path, '"path" is required argument');
         check.assert.nonEmptyString(path, '"path" should be non-empty string');
         return this._openFile(path, false);
@@ -101,6 +111,7 @@ class AggregionBundle  {
      * @param {string} path Path to the file in the bundle
      */
     deleteFile(path) {
+        this._checkNotClosed();
         check.assert.assigned(path, '"path" is required argument');
         check.assert.nonEmptyString(path, '"path" should be non-empty string');
         let {_bundle: bundle} = this;
@@ -114,6 +125,7 @@ class AggregionBundle  {
      * @return {number}
      */
     getFileSize(path) {
+        this._checkNotClosed();
         check.assert.assigned(path, '"path" is required argument');
         check.assert.nonEmptyString(path, '"path" should be non-empty string');
         let {_bundle: bundle} = this;
@@ -127,6 +139,7 @@ class AggregionBundle  {
      * @param {number} position Position in the file to seek (in bytes)
      */
     seekFile(fd, position) {
+        this._checkNotClosed();
         check.assert.assigned(fd, '"fd" is required argument');
         check.assert.assigned(position, '"position" is required argument');
         check.assert.integer(position, '"position" should be integer');
@@ -142,6 +155,7 @@ class AggregionBundle  {
      * @return {Promise.<Buffer>} Block data
      */
     readFileBlock(fd, size) {
+        this._checkNotClosed();
         check.assert.assigned(fd, '"fd" is required argument');
         check.assert.assigned(size, '"size" is required argument');
         check.assert.integer(size, '"size" should be integer');
@@ -164,6 +178,7 @@ class AggregionBundle  {
      * @return {Promise.<Buffer>} Attributes data
      */
     readFilePropertiesData(fd) {
+        this._checkNotClosed();
         check.assert.assigned(fd, '"fd" is required argument');
         let {_bundle: bundle} = this;
         let def = Q.defer();
@@ -184,6 +199,7 @@ class AggregionBundle  {
      * @return {Promise}
      */
     writeFileBlock(fd, data) {
+        this._checkNotClosed();
         check.assert.assigned(fd, '"fd" is required argument');
         check.assert.assigned(data, '"data" is required argument');
         if (typeof data === 'string') {
@@ -211,6 +227,7 @@ class AggregionBundle  {
      * @return {Promise}
      */
     writeFilePropertiesData(fd, data) {
+        this._checkNotClosed();
         check.assert.assigned(fd, '"fd" is required argument');
         check.assert.assigned(data, '"data" is required argument');
         if (typeof data === 'string') {
@@ -229,6 +246,16 @@ class AggregionBundle  {
             }
         });
         return def.promise;
+    }
+
+    /**
+     * Closes the bundle
+     */
+    close() {
+        this._checkNotClosed();
+        let {_bundle: bundle} = this;
+        bundle.Close();
+        this._closed = true;
     }
 
     /**
@@ -292,6 +319,14 @@ class AggregionBundle  {
             }
         });
         return def.promise;
+    }
+
+    /**
+     * Checks that bundle is not closed
+     * @private
+     */
+    _checkNotClosed() {
+        check.assert.equal(this._closed, false, 'You can\'t do anything with bundle after close');
     }
 }
 

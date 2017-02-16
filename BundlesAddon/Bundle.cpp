@@ -71,6 +71,7 @@ NAN_MODULE_INIT(Bundle::Init) {
   SetPrototypeMethod(tpl, "FileRead",         FileRead);
   SetPrototypeMethod(tpl, "FileWrite",        FileWrite);
   SetPrototypeMethod(tpl, "FileDelete",       FileDelete);
+  SetPrototypeMethod(tpl, "Close",            Close);
 
   constructor().Reset(GetFunction(tpl).ToLocalChecked());
   Nan::Set(target, Nan::New("Bundle").ToLocalChecked(), GetFunction(tpl).ToLocalChecked());
@@ -400,5 +401,13 @@ NAN_METHOD(Bundle::FileDelete) {
   int     fileIdx = info[0]->Int32Value();
 
   BundleFileDelete(obj->_bundle, fileIdx);
+}
+
+NAN_METHOD(Bundle::Close) {
+  Bundle *obj     = ObjectWrap::Unwrap<Bundle>(info.Holder());
+  if (obj->_bundle != nullptr) {
+    BundleClose(obj->_bundle);
+    obj->_bundle = nullptr;
+  }
 }
 } // namespace aggregion

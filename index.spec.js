@@ -5,6 +5,8 @@ const crypto = require('crypto');
 const temp = require('temp');
 const fs = require('fs');
 const fsExtra = require('fs-extra');
+const exec = require('child_process').exec;
+
 
 describe('AggregionBundle', () => {
 
@@ -73,7 +75,6 @@ describe('AggregionBundle', () => {
     after(() => {
         fs.unlinkSync(testBundlePath);
     });
-
 
 
     describe('#constructor', () => {
@@ -383,15 +384,16 @@ describe('AggregionBundle', () => {
             let tempPath = temp.path() + '.agb';
             let bundle = new AggregionBundle({path: tempPath});
             const filePath = 'dir1/dir2/file.dat';
-            const data = new Buffer('testString', 'UTF-8');
+            const data = new Buffer('testString', 'utf8');
             bundle
                 .createFile(filePath)
                 .then((fd) => {
                     return bundle.writeFilePropertiesData(fd, data);
                 })
                 .then(() => {
-                    let fd2 = bundle.openFile(filePath);
-                    return bundle.readFilePropertiesData(fd2);
+                    let bundle2 = new AggregionBundle({path: tempPath, readonly: true});
+                    let fd2 = bundle2.openFile(filePath);
+                    return bundle2.readFilePropertiesData(fd2);
                 })
                 .then((readData) => {
                     data.compare(readData).should.equal(0);
@@ -400,6 +402,46 @@ describe('AggregionBundle', () => {
                 .catch(done)
                 .then(() => {
                     fs.unlinkSync(tempPath);
+                });
+        });
+
+        it('should really write all data to the disk', (done) => {
+            let tempPath = temp.path() + '.agb';
+            let bundle = new AggregionBundle({path: tempPath});
+            const filePath = 'dir1/dir2/file.dat';
+            const data = new Buffer('testString', 'UTF-8');
+            bundle
+                .createFile(filePath)
+                .then((fd) => {
+                    return bundle.writeFilePropertiesData(fd, data);
+                })
+                .then(() => {
+                    bundle.close();
+                    let script = path.join(__dirname, './bin/readbundle.js');
+                    return new Promise((resolve, reject) => {
+                        let run = `${script} fileprops -p ${filePath} ${tempPath}`;
+                        exec(run, (err, stdout, stderr) => {
+                            if (err) {
+                                return reject(err);
+                            }
+                            let hex = stdout.replace('\n', '');
+                            hex.should.not.be.empty;
+                            try {
+                                let buf = new Buffer(hex, 'hex');
+                                resolve(buf);
+                            } catch (e) {
+                                reject(e);
+                            }
+                        });
+                    });
+                })
+                .then((readData) => {
+                    data.compare(readData).should.equal(0);
+                    done();
+                })
+                .catch(done)
+                .then(() => {
+                    //fs.unlinkSync(tempPath);
                 });
         });
     });

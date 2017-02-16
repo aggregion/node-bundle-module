@@ -1,13 +1,17 @@
 {
   "name": "agg-bundle",
   "description": "Node.js module for reading and creating Aggregion binary bundles",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "main": "index.js",
+  "bin": {
+    "readbundle": "./bin/readbundle.js"
+  },
   "scripts": {
     "test": "./node_modules/mocha/bin/mocha ./*.spec.js"
   },
   "dependencies": {
     "check-types": "^7.1.5",
+    "cli": "^1.0.1",
     "nan": "^2.5.0",
     "node-gyp": "^3.4.0",
     "q": "^1.4.1",
