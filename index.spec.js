@@ -99,6 +99,7 @@ describe('AggregionBundle', () => {
                     bundleFiles.should.include.members(testNames);
                     testNames.should.include.members(bundleFiles);
                     console.log('equal');
+                    bundle.close();
                     done();
                 })
                 .catch(done);
@@ -112,6 +113,7 @@ describe('AggregionBundle', () => {
                 .getBundleInfoData()
                 .then((data) => {
                     bundleInfo.compare(data).should.equal(0);
+                    bundle.close();
                     done();
                 });
         });
@@ -129,6 +131,7 @@ describe('AggregionBundle', () => {
                         .getBundleInfoData()
                         .then((data) => {
                             bundleInfo.compare(data).should.equal(0);
+                            bundle.close();
                             done();
                         });
                 })
@@ -146,6 +149,7 @@ describe('AggregionBundle', () => {
                 .getBundlePropertiesData()
                 .then((data) => {
                     bundleProperties.compare(data).should.equal(0);
+                    bundle.close();
                     done();
                 });
         });
@@ -158,11 +162,13 @@ describe('AggregionBundle', () => {
             bundle
                 .setBundlePropertiesData(bundleProperties)
                 .then(() => {
+                    bundle.close();
                     let bundle2 = new AggregionBundle({path: tempPath});
                     return bundle2
                         .getBundlePropertiesData()
                         .then((data) => {
                             bundleProperties.compare(data).should.equal(0);
+                            bundle2.close();
                             done();
                         });
                 })
@@ -181,12 +187,14 @@ describe('AggregionBundle', () => {
             bundle
                 .createFile(filePath)
                 .then(() => {
+                    bundle.close();
                     let bundle2 = new AggregionBundle({path: tempPath});
                     return bundle2
                         .getFiles()
                         .then((files) => {
                             files.should.have.lengthOf(1);
                             files[0].should.equal(filePath);
+                            bundle2.close();
                             done();
                         });
                 })
@@ -204,11 +212,13 @@ describe('AggregionBundle', () => {
             bundle
                 .createFile(filePath)
                 .then(() => {
+                    bundle.close();
                     let bundle2 = new AggregionBundle({path: tempPath});
                     return bundle2
                         .getFiles()
                         .then((files) => {
                             files.should.have.lengthOf(101);
+                            bundle2.close();
                             done();
                         });
                 })
@@ -229,6 +239,7 @@ describe('AggregionBundle', () => {
                 fds.should.not.include(fd);
                 fds.push(fd);
             });
+            bundle.close();
         });
     });
 
@@ -247,6 +258,7 @@ describe('AggregionBundle', () => {
                 })
                 .then((files) => {
                     files.length.should.equal(filesCount - 1);
+                    bundle.close();
                     done();
                 })
                 .catch(done)
@@ -269,6 +281,7 @@ describe('AggregionBundle', () => {
                 })
                 .then(() => {
                     bundle.getFileSize(filePath).should.equal(data.length);
+                    bundle.close();
                     done();
                 })
                 .catch(done)
@@ -297,6 +310,7 @@ describe('AggregionBundle', () => {
                 })
                 .then((readData) => {
                     expectedData.compare(readData).should.equal(0);
+                    bundle.close();
                     done();
                 })
                 .catch(done)
@@ -324,6 +338,7 @@ describe('AggregionBundle', () => {
                 })
                 .then((readData) => {
                     data.compare(readData).should.equal(0);
+                    bundle.close();
                     done();
                 })
                 .catch(done)
@@ -347,6 +362,7 @@ describe('AggregionBundle', () => {
                 })
                 .then((readProps) => {
                     testProps.compare(readProps).should.equal(0);
+                    bundle.close();
                     done();
                 })
                 .catch(done);
@@ -370,6 +386,7 @@ describe('AggregionBundle', () => {
                 })
                 .then((readData) => {
                     data.compare(readData).should.equal(0);
+                    bundle.close();
                     done();
                 })
                 .catch(done)
@@ -385,18 +402,21 @@ describe('AggregionBundle', () => {
             let bundle = new AggregionBundle({path: tempPath});
             const filePath = 'dir1/dir2/file.dat';
             const data = new Buffer('testString', 'utf8');
+            let bundle2;
             bundle
                 .createFile(filePath)
                 .then((fd) => {
                     return bundle.writeFilePropertiesData(fd, data);
                 })
                 .then(() => {
-                    let bundle2 = new AggregionBundle({path: tempPath, readonly: true});
+                    bundle.close();
+                    bundle2 = new AggregionBundle({path: tempPath, readonly: true});
                     let fd2 = bundle2.openFile(filePath);
                     return bundle2.readFilePropertiesData(fd2);
                 })
                 .then((readData) => {
                     data.compare(readData).should.equal(0);
+                    bundle2.close();
                     done();
                 })
                 .catch(done)
@@ -417,7 +437,7 @@ describe('AggregionBundle', () => {
                 })
                 .then(() => {
                     bundle.close();
-                    let script = path.join(__dirname, './bin/readbundle.js');
+                    let script = path.join(__dirname, './utils/readbundle.js');
                     return new Promise((resolve, reject) => {
                         let run = `${script} fileprops -p ${filePath} ${tempPath}`;
                         exec(run, (err, stdout, stderr) => {
@@ -441,7 +461,7 @@ describe('AggregionBundle', () => {
                 })
                 .catch(done)
                 .then(() => {
-                    //fs.unlinkSync(tempPath);
+                    fs.unlinkSync(tempPath);
                 });
         });
     });

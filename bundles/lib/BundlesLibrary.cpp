@@ -20,7 +20,7 @@ BundlePtr BundleOpen(const char *filename, int mode) {
 
   // выделяем объекты
   try {
-    stream = std::make_shared<CBinaryFile>(0, 1024 * 1024);
+    stream = std::make_shared<CBinaryFile>(0, 0);
     bundle = new CBundleFile(std::dynamic_pointer_cast<IBinaryStream>(stream));
   } catch (...) {
     if (bundle != nullptr) {
