@@ -20,7 +20,8 @@
             'conditions': [
                 ['OS=="mac"', {
                   'xcode_settings': {
-                    'GCC_ENABLE_CPP_EXCEPTIONS': 'YES'
+                    'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',
+                    'OTHER_CPLUSPLUSFLAGS': ['-stdlib=libc++']
                   }
                 }]
             ]
@@ -39,13 +40,14 @@
             "dependencies":   [
                 "BundlesLibrary"
             ],
-            "cflags_cxx":     [ "-std=c++11" ],
+            "cflags_cxx":     [ "-std=c++11 --with-gcc-toolchain" ],
             "cflags!":        [ "-fno-exceptions" ],
             "cflags_cc!":     [ "-fno-exceptions" ],
             'conditions': [
                 ['OS=="mac"', {
                   'xcode_settings': {
-                    'GCC_ENABLE_CPP_EXCEPTIONS': 'YES'
+                    'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',
+                    'OTHER_CPLUSPLUSFLAGS': ['-stdlib=libc++']
                   }
                 }]
             ]
