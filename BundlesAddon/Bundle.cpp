@@ -2,6 +2,7 @@
 
 using namespace std;
 using namespace v8;
+using Nan::To;
 
 namespace aggregion {
 BundleAttribute fromParam(const string& param) {
@@ -21,12 +22,12 @@ vector<char>* dataFromArg(Local<Value>val) {
   auto ret = new vector<char>();
 
   if (node::Buffer::HasInstance(val)) {
-    Local<Object> buf = val->ToObject();
+    Local<Object> buf = To<Object>(val).ToLocalChecked();
     ret->resize(static_cast<size_t>(node::Buffer::Length(buf)));
     memcpy(ret->data(), node::Buffer::Data(buf), ret->size());
   } else if (!val->IsObject()) {
-    Local<String> strInput = val->ToString();
-    ret->resize(static_cast<size_t>(strInput->Utf8Length()));
+    Local<String> strInput = To<String>(val).ToLocalChecked();
+    ret->resize(static_cast<size_t>(strInput->Utf8Length(nullptr)));
     memcpy(ret->data(), *String::Utf8Value(strInput), ret->size());
   }
   return ret;
@@ -89,7 +90,7 @@ NAN_METHOD(Bundle::New) {
   }
 
   if (info.IsConstructCall()) {
-    string fileName    = *String::Utf8Value(info[0]->ToString());
+    string fileName    = *String::Utf8Value(To<String>(info[0]).ToLocalChecked());
     Local<Array> modes = Local<Array>::Cast(info[1]);
 
     int bmode = 0;
@@ -212,7 +213,7 @@ NAN_METHOD(Bundle::AttributeGet) {
   }
   Bundle *obj = ObjectWrap::Unwrap<Bundle>(info.Holder());
 
-  BundleAttribute type = fromParam(*String::Utf8Value(info[0]->ToString()));
+  BundleAttribute type = fromParam(*String::Utf8Value(To<String>(info[0]).ToLocalChecked()));
 
   auto dst       = new vector<char>();
   int64_t dstLen = 0;
@@ -226,7 +227,7 @@ NAN_METHOD(Bundle::AttributeGet) {
                                     obj->_bundle,
                                     -1,
                                     dst,
-                                    *String::Utf8Value(info[0]->ToString())));
+                                    *String::Utf8Value(To<String>(info[0]).ToLocalChecked())));
 }
 
 NAN_METHOD(Bundle::AttributeSet) {
@@ -244,7 +245,7 @@ NAN_METHOD(Bundle::AttributeSet) {
                                     obj->_bundle,
                                     -1,
                                     src,
-                                    *String::Utf8Value(info[0]->ToString())));
+                                    *String::Utf8Value(To<String>(info[0]).ToLocalChecked())));
 }
 
 NAN_METHOD(Bundle::FileAttributeGet)     {
@@ -314,7 +315,7 @@ NAN_METHOD(Bundle::FileOpen) {
     openAlways = info[1]->BooleanValue();
   }
   Bundle *obj      = ObjectWrap::Unwrap<Bundle>(info.Holder());
-  string  fileName = *String::Utf8Value(info[0]->ToString());
+  string  fileName = *String::Utf8Value(To<String>(info[0]).ToLocalChecked());
 
   int idx = BundleFileOpen(obj->_bundle, fileName.c_str(), openAlways ? 1 : 0);
 
@@ -329,7 +330,7 @@ NAN_METHOD(Bundle::FileSeek) {
   Bundle *obj     = ObjectWrap::Unwrap<Bundle>(info.Holder());
   int     fileIdx = info[0]->Int32Value();
   double  offset  = info[1]->NumberValue();
-  string  param   = *String::Utf8Value(info[2]->ToString());
+  string  param   = *String::Utf8Value(To<String>(info[2]).ToLocalChecked());
 
   int origin = 0;
 
