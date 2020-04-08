@@ -1,5 +1,5 @@
 {
-  "name": "agg-bundle",
+  "name": "@aggregion/agg-bundle",
   "description": "Node.js module for reading and creating Aggregion binary bundles",
   "version": "1.0.6",
   "main": "index.js",
