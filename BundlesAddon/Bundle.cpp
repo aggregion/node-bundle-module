@@ -4,6 +4,13 @@ using namespace std;
 using namespace v8;
 using Nan::To;
 
+#define CHECK_RESULT_OF(expr) \
+  if (!expr) { \
+    ThrowError((std::string{__FUNCTION__} + " conversion failure at " + std::to_string(__LINE__)).c_str()); \
+  }
+
+#define CHECKED(...) CHECK_RESULT_OF((__VA_ARGS__))
+
 namespace aggregion {
 BundleAttribute fromParam(const string& param) {
   int type = 0;
@@ -26,9 +33,10 @@ vector<char>* dataFromArg(Local<Value>val) {
     ret->resize(static_cast<size_t>(node::Buffer::Length(buf)));
     memcpy(ret->data(), node::Buffer::Data(buf), ret->size());
   } else if (!val->IsObject()) {
+    auto isolate = Isolate::GetCurrent();
     Local<String> strInput = To<String>(val).ToLocalChecked();
     ret->resize(static_cast<size_t>(strInput->Utf8Length(nullptr)));
-    memcpy(ret->data(), *String::Utf8Value(strInput), ret->size());
+    memcpy(ret->data(), *String::Utf8Value(isolate, strInput), ret->size());
   }
   return ret;
 }
@@ -88,15 +96,19 @@ NAN_METHOD(Bundle::New) {
     ThrowTypeError("Wrong arguments type");
     return;
   }
+  auto isolate = Isolate::GetCurrent();
+  auto context = Context::New(isolate);
 
   if (info.IsConstructCall()) {
-    string fileName    = *String::Utf8Value(To<String>(info[0]).ToLocalChecked());
+    string fileName    = *String::Utf8Value(isolate, To<String>(info[0]).ToLocalChecked());
     Local<Array> modes = Local<Array>::Cast(info[1]);
 
     int bmode = 0;
 
     for (uint32_t i = 0, j = modes->Length(); i < j; i++) {
-      string m = *String::Utf8Value(Local<String>::Cast(modes->Get(i)));
+      v8::Local<Value> item;
+      CHECKED(modes->Get(context, i).ToLocal(&item));
+      string m = *String::Utf8Value(isolate, Local<String>::Cast(item));
 
       if (m.compare("Read") == 0) {
         bmode |= BMODE_READ;
@@ -124,7 +136,10 @@ NAN_METHOD(Bundle::New) {
     const int       argc       = 2;
     Local<Value>    argv[argc] = { info[0], info[1] };
     Local<Function> cons       = Nan::New(constructor());
-    info.GetReturnValue().Set(cons->NewInstance(argc, argv));
+
+    Local<Object> instance;
+    CHECKED(cons->NewInstance(context, argc, argv).ToLocal(&instance));
+    info.GetReturnValue().Set(instance);
   }
 }
 
@@ -193,7 +208,7 @@ void BundleWorker::Execute()
 void BundleWorker::HandleOKCallback()
 {
   // set up return arguments
-  Handle<Value> argv[2] = { Undefined() };
+  Local<Value> argv[2] = { Undefined() };
 
   if ((_operation == OpAttributeGet) ||
       (_operation == OpFileAttributeGet) ||
@@ -213,7 +228,9 @@ NAN_METHOD(Bundle::AttributeGet) {
   }
   Bundle *obj = ObjectWrap::Unwrap<Bundle>(info.Holder());
 
-  BundleAttribute type = fromParam(*String::Utf8Value(To<String>(info[0]).ToLocalChecked()));
+  auto isolate = Isolate::GetCurrent();
+
+  BundleAttribute type = fromParam(*String::Utf8Value(isolate, To<String>(info[0]).ToLocalChecked()));
 
   auto dst       = new vector<char>();
   int64_t dstLen = 0;
@@ -227,7 +244,7 @@ NAN_METHOD(Bundle::AttributeGet) {
                                     obj->_bundle,
                                     -1,
                                     dst,
-                                    *String::Utf8Value(To<String>(info[0]).ToLocalChecked())));
+                                    *String::Utf8Value(isolate, To<String>(info[0]).ToLocalChecked())));
 }
 
 NAN_METHOD(Bundle::AttributeSet) {
@@ -240,12 +257,14 @@ NAN_METHOD(Bundle::AttributeSet) {
 
   auto src = dataFromArg(info[1]);
 
+  auto isolate = Isolate::GetCurrent();
+
   AsyncQueueWorker(new BundleWorker(new Callback(info[2].As<Function>()),
                                     BundleWorker::OpAttributeSet,
                                     obj->_bundle,
                                     -1,
                                     src,
-                                    *String::Utf8Value(To<String>(info[0]).ToLocalChecked())));
+                                    *String::Utf8Value(isolate, To<String>(info[0]).ToLocalChecked())));
 }
 
 NAN_METHOD(Bundle::FileAttributeGet)     {
@@ -253,10 +272,15 @@ NAN_METHOD(Bundle::FileAttributeGet)     {
     ThrowTypeError("Wrong arguments");
     return;
   }
+  auto isolate = Isolate::GetCurrent();
+  auto context = Context::New(isolate);
+
   Bundle *obj     = ObjectWrap::Unwrap<Bundle>(info.Holder());
-  int     fileIdx = info[0]->Int32Value();
+  int     fileIdx = 0;
   auto    dst     = new vector<char>();
   int64_t dstLen  = 0;
+
+  CHECKED(info[0]->Int32Value(context).To(&fileIdx));
 
   // calculate size
   BundleFileAttributeGet(obj->_bundle, fileIdx, nullptr, 0, &dstLen, nullptr);
@@ -272,8 +296,13 @@ NAN_METHOD(Bundle::FileAttributeSet) {
     return;
   }
 
+  auto isolate = Isolate::GetCurrent();
+  auto context = Context::New(isolate);
+
   Bundle *obj     = ObjectWrap::Unwrap<Bundle>(info.Holder());
-  int     fileIdx = info[0]->Int32Value();
+  int     fileIdx = 0;
+
+  CHECKED(info[0]->Int32Value(context).To(&fileIdx));
 
   auto src = dataFromArg(info[1]);
 
@@ -311,11 +340,14 @@ NAN_METHOD(Bundle::FileOpen) {
     return;
   }
 
+  auto isolate = Isolate::GetCurrent();
+
   if ((info.Length() > 1) && info[1]->IsBoolean()) {
-    openAlways = info[1]->BooleanValue();
+    openAlways = info[1]->BooleanValue(isolate);
   }
+
   Bundle *obj      = ObjectWrap::Unwrap<Bundle>(info.Holder());
-  string  fileName = *String::Utf8Value(To<String>(info[0]).ToLocalChecked());
+  string  fileName = *String::Utf8Value(isolate, To<String>(info[0]).ToLocalChecked());
 
   int idx = BundleFileOpen(obj->_bundle, fileName.c_str(), openAlways ? 1 : 0);
 
@@ -327,10 +359,17 @@ NAN_METHOD(Bundle::FileSeek) {
     ThrowTypeError("Wrong arguments");
     return;
   }
+
+  auto isolate = Isolate::GetCurrent();
+  auto context = Context::New(isolate);
+
   Bundle *obj     = ObjectWrap::Unwrap<Bundle>(info.Holder());
-  int     fileIdx = info[0]->Int32Value();
-  double  offset  = info[1]->NumberValue();
-  string  param   = *String::Utf8Value(To<String>(info[2]).ToLocalChecked());
+  int     fileIdx = 0;
+  double  offset  = 0.0;
+  string  param   = *String::Utf8Value(isolate, To<String>(info[2]).ToLocalChecked());
+
+  CHECKED(info[0]->Int32Value(context).To(&fileIdx));
+  CHECKED(info[1]->NumberValue(context).To(&offset));
 
   int origin = 0;
 
@@ -354,8 +393,14 @@ NAN_METHOD(Bundle::FileLength) {
     ThrowTypeError("Wrong arguments");
     return;
   }
+
+  auto isolate = Isolate::GetCurrent();
+  auto context = Context::New(isolate);
+
   Bundle *obj     = ObjectWrap::Unwrap<Bundle>(info.Holder());
-  int     fileIdx = info[0]->Int32Value();
+  int     fileIdx = 0;
+
+  CHECKED(info[0]->Int32Value(context).To(&fileIdx));
 
   int64_t total = BundleFileLength(obj->_bundle, fileIdx);
   info.GetReturnValue().Set(Nan::New<Number>(static_cast<double>(total)));
@@ -366,9 +411,16 @@ NAN_METHOD(Bundle::FileRead) {
     ThrowTypeError("Wrong arguments");
     return;
   }
+
+  auto isolate = Isolate::GetCurrent();
+  auto context = Context::New(isolate);
+
   Bundle *obj     = ObjectWrap::Unwrap<Bundle>(info.Holder());
-  int     fileIdx = info[0]->Int32Value();
-  double  total   = info[1]->NumberValue();
+  int     fileIdx = 0;
+  double  total   = 0.0;
+
+  CHECKED(info[0]->Int32Value(context).To(&fileIdx));
+  CHECKED(info[1]->NumberValue(context).To(&total));
 
   if (total < 0) {
     ThrowTypeError("Bad length");
@@ -385,9 +437,15 @@ NAN_METHOD(Bundle::FileWrite) {
     ThrowTypeError("Wrong arguments");
     return;
   }
+
+  auto isolate = Isolate::GetCurrent();
+  auto context = Context::New(isolate);
+
   Bundle *obj     = ObjectWrap::Unwrap<Bundle>(info.Holder());
-  int     fileIdx = info[0]->Int32Value();
+  int     fileIdx = 0;
   auto    src     = dataFromArg(info[1]);
+
+  CHECKED(info[0]->Int32Value(context).To(&fileIdx));
 
   AsyncQueueWorker(new BundleWorker(new Callback(info[2].As<Function>()),
                                     BundleWorker::OpFileWrite, obj->_bundle, fileIdx, src));
@@ -398,8 +456,14 @@ NAN_METHOD(Bundle::FileDelete) {
     ThrowTypeError("Wrong arguments");
     return;
   }
+
+  auto isolate = Isolate::GetCurrent();
+  auto context = Context::New(isolate);
+
   Bundle *obj     = ObjectWrap::Unwrap<Bundle>(info.Holder());
-  int     fileIdx = info[0]->Int32Value();
+  int     fileIdx = 0;
+
+  CHECKED(info[0]->Int32Value(context).To(&fileIdx));
 
   BundleFileDelete(obj->_bundle, fileIdx);
 }

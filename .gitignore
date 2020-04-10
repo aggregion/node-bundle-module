@@ -57,3 +57,4 @@ dist
 *.opendb
 node_modules
 .idea
+.vscode/c_cpp_properties.json
