@@ -215,9 +215,9 @@ void BundleWorker::HandleOKCallback()
       (_operation == OpFileRead)) {
     auto result = NewBuffer(_buffer->data(), _buffer->size(), buffer_delete_callback, _buffer);
     argv[1] = result.ToLocalChecked();
-    callback->Call(2, argv);
+    callback->Call(2, argv, async_resource);
   } else {
-    callback->Call(1, argv);
+    callback->Call(1, argv, async_resource);
   }
 }
 
