@@ -21,7 +21,7 @@ BundlePtr BundleOpen(const char *filename, int mode) {
   // выделяем объекты
   try {
     stream = std::make_shared<CBinaryFile>(0, 0);
-    bundle = new CBundleFile(std::dynamic_pointer_cast<IBinaryStream>(stream));
+    bundle = new CBundleFile(stream);
   } catch (...) {
     if (bundle != nullptr) {
       delete bundle;
@@ -67,7 +67,7 @@ BundlePtr BundleOpenFromStream(std::shared_ptr<IBinaryStream>
 
   // выделяем объекты
   try {
-    bundle = new CBundleFile(std::dynamic_pointer_cast<IBinaryStream>(stream));
+    bundle = new CBundleFile(stream);
   } catch (...) {
     if (bundle != nullptr) {
       delete bundle;
